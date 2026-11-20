@@ -1,0 +1,47 @@
+name: Build Flutter
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag yang berisi source ZIP
+        required: true
+      build_type:
+        description: release atau debug
+        default: release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+          channel: stable
+
+      - name: Download source ZIP from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p source
+          gh release download "${{ inputs.tag }}" --repo ${{ github.repository }} --pattern "*.zip" --dir source
+          cd source && unzip -o *.zip
+          # sesuaikan kalau struktur folder beda
+          if [ -f pubspec.yaml ]; then ROOT=.; else ROOT=$(find . -name pubspec.yaml | head -1 | xargs dirname); fi
+          echo "PROJECT_ROOT=$ROOT" >> $GITHUB_ENV
+
+      - name: Flutter build
+        run: |
+          cd "$PROJECT_ROOT"
+          flutter pub get
+          if [ "${{ inputs.build_type }}" = "debug" ]; then
+            flutter build apk --debug
+          else
+            flutter build apk --release
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: "**/build/app/outputs/flutter-apk/*.apk"
